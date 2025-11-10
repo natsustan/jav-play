@@ -3,12 +3,7 @@ interface FetchVideoRequest {
   url: string
 }
 
-interface CheckUrlRequest {
-  type: 'checkUrl'
-  url: string
-}
-
-type BackgroundRequest = FetchVideoRequest | CheckUrlRequest;
+type BackgroundRequest = FetchVideoRequest;
 
 export default defineBackground({
   main() {
@@ -37,35 +32,6 @@ export default defineBackground({
           })
           .catch(error => {
             sendResponse({ success: false, error: error.message })
-          })
-        return true // Keep the message channel open for the async response
-      }
-      
-      if (request.type === 'checkUrl') {
-        console.log('checkUrl', request.url)
-        fetch(request.url, {
-          method: 'HEAD', // 只检查头部，不下载完整内容
-          redirect: 'follow',
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-          }
-        })
-          .then(response => {
-            console.log('checkUrl response', response.status)
-            sendResponse({ 
-              success: true, 
-              exists: response.ok,
-              status: response.status 
-            })
-          })
-          .catch(error => {
-            console.log('checkUrl error', error)
-            sendResponse({ 
-              success: true, 
-              exists: false,
-              status: 0,
-              error: error.message 
-            })
           })
         return true // Keep the message channel open for the async response
       }

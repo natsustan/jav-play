@@ -8,8 +8,7 @@ import {
 import { 
   addOrUpdateNavigationButtons, 
   hideNavigationButtons, 
-  showNavigationButtonChecking, 
-  showNavigationButton404 
+  showNavigationButtonChecking
 } from '../../components/NavigationButtons';
 
 const STORAGE_KEY = 'feature_enabled';
@@ -39,22 +38,10 @@ export default defineContentScript({
         showNavigationButtonChecking(videoSource as string);
         showPlayerButtonsChecking();
         
-        // 2. 检查目标页面是否存在
-        const targetUrl = getTargetUrl(videoNumber, videoSource as string);
-        const urlExists = await checkUrlExists(targetUrl);
-        
-        if (!urlExists) {
-          // 3.1 目标页面不存在，显示404状态
-          showNavigationButton404(videoSource as string);
-          showPlayerButtons404();
-          console.log('目标页面不存在:', targetUrl);
-          return;
-        }
-        
-        // 3.2 目标页面存在，显示正常的导航按钮
+        // 2. 直接显示导航按钮，不检查URL是否存在
         addOrUpdateNavigationButtons(videoNumber, videoSource as string);
         
-        // 4. 异步获取播放链接来显示播放器按钮
+        // 3. 异步获取播放链接来显示播放器按钮
         const playUrl = await getPlayUrl(videoNumber, videoSource as string);
         if (playUrl) {
           addOrUpdatePlayerButtons(playUrl);
@@ -117,25 +104,6 @@ function getTargetUrl(videoNumber: string, videoSource: string): string {
   }
 }
 
-// 检查URL是否存在
-async function checkUrlExists(url: string): Promise<boolean> {
-  try {
-    const response = await chrome.runtime.sendMessage({
-      type: 'checkUrl',
-      url: url
-    });
-
-    if (!response.success) {
-      console.error('检查URL时出错:', response.error);
-      return false;
-    }
-
-    return response.exists;
-  } catch (error) {
-    console.error('检查URL时出错:', error);
-    return false;
-  }
-}
 
 // 获取播放链接 (支持不同视频源)
 async function getPlayUrl(videoNumber: string, videoSource: string): Promise<string> {
