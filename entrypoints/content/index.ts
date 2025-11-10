@@ -33,13 +33,21 @@ export default defineContentScript({
       if (videoNumber) {
         // 获取用户选择的视频源
         const videoSource = await storage.getItem(`sync:${VIDEO_SOURCE_KEY}`) ?? 'missav';
+        const isOnMissav = window.location.hostname.includes('missav.ws');
+        const shouldShowNavButtons = !(videoSource === 'missav' && isOnMissav);
         
         // 1. 先显示检查状态
-        showNavigationButtonChecking(videoSource as string);
+        if (shouldShowNavButtons) {
+          showNavigationButtonChecking(videoSource as string);
+        } else {
+          hideNavigationButtons();
+        }
         showPlayerButtonsChecking();
         
         // 2. 直接显示导航按钮，不检查URL是否存在
-        addOrUpdateNavigationButtons(videoNumber, videoSource as string);
+        if (shouldShowNavButtons) {
+          addOrUpdateNavigationButtons(videoNumber, videoSource as string);
+        }
         
         // 3. 异步获取播放链接来显示播放器按钮
         const playUrl = await getPlayUrl(videoNumber, videoSource as string);
