@@ -15,7 +15,7 @@ const STORAGE_KEY = 'feature_enabled';
 const VIDEO_SOURCE_KEY = 'video_source';
 
 export default defineContentScript({
-  matches: ['*://*.javdb.com/v/*', '*://*.javlibrary.com/*'],
+  matches: ['*://*.javdb.com/v/*', '*://*.javlibrary.com/*', '*://*.missav.ws/*'],
   async main() {
     const isEnabled = await storage.getItem(`sync:${STORAGE_KEY}`) ?? true;
 
@@ -69,7 +69,21 @@ export default defineContentScript({
 
 // 获取目标视频番号
 function getVideoNumber(): string | undefined {
-  const pathname = window.location.pathname;
+  const { hostname, pathname } = window.location;
+
+  // missav: derive番号 directly from URL such as /dm1/en/ipx-123
+  if (hostname.includes('missav.ws')) {
+    const segments = pathname.split('/').filter(Boolean).reverse();
+    const candidate = segments.find((segment) => /^[a-z0-9-_.]+$/i.test(segment) && /\d/.test(segment));
+    if (candidate) {
+      const videoNumber = candidate.toUpperCase();
+      console.log('MissAV 解析番号', videoNumber);
+      return videoNumber;
+    }
+    console.log('MissAV 页面未从 URL 解析到番号');
+    return;
+  }
+
   // javdb
   if (pathname.startsWith('/v/')) {
     const targetElement = document.querySelector('a.button.is-white.copy-to-clipboard');
@@ -117,44 +131,61 @@ async function getPlayUrl(videoNumber: string, videoSource: string): Promise<str
 
 // 获取 MissAV 播放链接
 async function getMissavPlayUrl(videoNumber: string): Promise<string> {
+  // 当前就处在 missav 页面时，直接解析 DOM，避免重复请求
+  if (window.location.hostname.includes('missav.ws')) {
+    const directUrl = extractMissavPlaylistUrl(document);
+    if (directUrl) {
+      console.log('MissAV playlist 来自当前页面');
+      return directUrl;
+    }
+    console.warn('当前 MissAV 页面未解析到 playlist，尝试回退到远程获取');
+  }
+
   const lowerTargetNumber = videoNumber.toLowerCase();
   const targetUrl = `https://missav.ws/dm1/en/${lowerTargetNumber}`;
 
   try {
-      const response = await chrome.runtime.sendMessage({
-          type: 'fetchVideo',
-          url: targetUrl
-      });
+    const response = await chrome.runtime.sendMessage({
+      type: 'fetchVideo',
+      url: targetUrl
+    });
 
-      if (!response.success) {
-          throw new Error(response.error);
-      }
+    if (!response.success) {
+      throw new Error(response.error);
+    }
 
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(response.html, 'text/html');
-
-      const scripts = doc.getElementsByTagName('script');
-
-      for (const script of scripts) {
-          const content = script.textContent || '';
-          if (content.includes('thumbnail')) {
-              const urlsMatch = content.match(/urls:\s*\[(.*?)\]/s);
-              if (urlsMatch) {
-                  const firstUrl = urlsMatch[1].split(',')[0].trim().replace(/"/g, '').replace(/\\/g, '');
-                  const uuidMatch = firstUrl.match(/\/([0-9a-f-]+)\/seek\//i);
-                  if (uuidMatch) {
-                    console.log('MissAV uuidMatch', uuidMatch[1]);
-                    return `https://surrit.com/${uuidMatch[1]}/playlist.m3u8`;
-                  }
-              }
-          }
-      }
-      console.warn('未找到 MissAV uuid');
-      return '';
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(response.html, 'text/html');
+    const playlistUrl = extractMissavPlaylistUrl(doc);
+    if (playlistUrl) {
+      return playlistUrl;
+    }
+    console.warn('未在远程 MissAV 文档中解析到 playlist');
+    return '';
   } catch (error) {
-      console.error('获取或解析 MissAV 文档时出错:', error);
-      return '';
+    console.error('获取或解析 MissAV 文档时出错:', error);
+    return '';
   }
+}
+
+function extractMissavPlaylistUrl(doc: Document): string {
+  const scripts = doc.getElementsByTagName('script');
+
+  for (const script of scripts) {
+    const content = script.textContent || '';
+    if (content.includes('thumbnail')) {
+      const urlsMatch = content.match(/urls:\s*\[(.*?)\]/s);
+      if (urlsMatch) {
+        const firstUrl = urlsMatch[1].split(',')[0].trim().replace(/"/g, '').replace(/\\/g, '');
+        const uuidMatch = firstUrl.match(/\/([0-9a-f-]+)\/seek\//i);
+        if (uuidMatch) {
+          console.log('MissAV uuidMatch', uuidMatch[1]);
+          return `https://surrit.com/${uuidMatch[1]}/playlist.m3u8`;
+        }
+      }
+    }
+  }
+  return '';
 }
 
 // 获取 Jable 播放链接
