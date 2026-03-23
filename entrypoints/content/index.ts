@@ -3,8 +3,11 @@ import {
   addOrUpdatePlayerButtons, 
   hidePlayerButtons, 
   showPlayerButtonsChecking, 
-  showPlayerButtons404 
+  showPlayerButtons404,
+  addOrUpdateCopyMagnetButton,
+  hideCopyMagnetButton
 } from '../../components/PlayerButtons';
+import { createOrUpdateCopyButton } from '../../components/PlayerButtons';
 import { 
   addOrUpdateNavigationButtons, 
   hideNavigationButtons, 
@@ -34,6 +37,7 @@ export default defineContentScript({
         // 获取用户选择的视频源
         const videoSource = await storage.getItem(`sync:${VIDEO_SOURCE_KEY}`) ?? 'missav';
         const isOnMissav = window.location.hostname.includes('missav.ws');
+        const isJavdbPage = window.location.hostname.includes('javdb.com');
         const shouldShowNavButtons = !(videoSource === 'missav' && isOnMissav);
         
         // 1. 先显示检查状态
@@ -44,18 +48,46 @@ export default defineContentScript({
         }
         showPlayerButtonsChecking();
         
-        // 2. 直接显示导航按钮，不检查URL是否存在
+        // 2. 对于JavDB页面，检查磁力链接
+        if (isJavdbPage) {
+          console.log('🎯 [Debug] JavDB页面，开始检查磁力链接');
+          // 延迟执行以确保页面完全加载
+          setTimeout(() => {
+            const magnetLink = getMagnetLink();
+            if (magnetLink) {
+              console.log('✅ [Debug] JavDB页面找到磁力链接:', magnetLink);
+              addOrUpdateCopyMagnetButton(magnetLink);
+            } else {
+              console.log('❌ [Debug] JavDB页面未找到磁力链接');
+              hideCopyMagnetButton();
+            }
+          }, 1500); // 延迟1.5秒执行
+        } else {
+          hideCopyMagnetButton();
+        }
+        
+        // 3. 直接显示导航按钮，不检查URL是否存在
         if (shouldShowNavButtons) {
           addOrUpdateNavigationButtons(videoNumber, videoSource as string);
         }
         
-        // 3. 异步获取播放链接来显示播放器按钮
+        // 4. 异步获取播放链接来显示播放器按钮
         const playUrl = await getPlayUrl(videoNumber, videoSource as string);
         if (playUrl) {
           addOrUpdatePlayerButtons(playUrl);
+          
+          // 对于MissAV页面，显示Copy Playlist按钮
+          if (isOnMissav) {
+            createOrUpdateCopyButton('wxt-copy-floating-button', 'Copy Playlist', playUrl, '180px', false);
+          }
         } else {
           // 如果没有播放链接，显示404状态
           showPlayerButtons404();
+          
+          // 对于MissAV页面，在404状态下也显示禁用的Copy Playlist按钮
+          if (isOnMissav) {
+            createOrUpdateCopyButton('wxt-copy-floating-button', 'Copy Playlist', '#', '180px', true);
+          }
         }
       }
     };
@@ -70,10 +102,84 @@ export default defineContentScript({
       }
     }).observe(document.body, { childList: true, subtree: true });
 
+    // 特别为JavDB页面监听磁力链接区域的变化
+    if (window.location.hostname.includes('javdb.com')) {
+      console.log('🎯 [Debug] JavDB页面，开始监听磁力链接区域变化');
+      
+      const magnetObserver = new MutationObserver(() => {
+        console.log('🔄 [Debug] 检测到DOM变化，重新检查磁力链接');
+        const magnetLink = getMagnetLink();
+        if (magnetLink) {
+          console.log('✅ [Debug] 动态发现磁力链接，显示按钮');
+          addOrUpdateCopyMagnetButton(magnetLink);
+        }
+      });
+      
+      // 等待一下再开始观察，确保页面元素已加载
+      setTimeout(() => {
+        const magnetContainer = document.querySelector('div.buttons.column');
+        if (magnetContainer) {
+          console.log('🔍 [Debug] 找到磁力链接容器，开始监听');
+          magnetObserver.observe(magnetContainer, { childList: true, subtree: true });
+        } else {
+          console.log('⚠️ [Debug] 未找到磁力链接容器，稍后重试');
+          // 如果第一次没找到，隔一段时间再试
+          setTimeout(() => {
+            const retryContainer = document.querySelector('div.buttons.column');
+            if (retryContainer) {
+              console.log('🔍 [Debug] 重试成功找到磁力链接容器');
+              magnetObserver.observe(retryContainer, { childList: true, subtree: true });
+            }
+          }, 2000);
+        }
+      }, 1000);
+    }
+
     // 页面加载时执行一次
     processPage();
   }
 });
+
+// 获取磁力链接
+function getMagnetLink(): string | undefined {
+  console.log('🧲 [Debug] 开始查找磁力链接...');
+  const buttonsColumn = document.querySelector('div.buttons.column');
+  console.log('🧲 [Debug] buttonsColumn:', buttonsColumn);
+  
+  if (buttonsColumn) {
+    // 尝试多种选择器找到磁力链接按钮
+    let firstCopyButton = buttonsColumn.querySelector('a[data-clipboard-text]');
+    console.log('🧲 [Debug] 方法1 - a[data-clipboard-text]:', firstCopyButton);
+    
+    // 如果没找到，尝试button选择器
+    if (!firstCopyButton) {
+      firstCopyButton = buttonsColumn.querySelector('button.copy-to-clipboard');
+      console.log('🧲 [Debug] 方法2 - button.copy-to-clipboard:', firstCopyButton);
+    }
+    
+    // 如果还没找到，尝试更广泛的搜索
+    if (!firstCopyButton) {
+      firstCopyButton = buttonsColumn.querySelector('[data-clipboard-text]');
+      console.log('🧲 [Debug] 方法3 - [data-clipboard-text]:', firstCopyButton);
+    }
+    
+    if (firstCopyButton) {
+      const magnetLink = firstCopyButton.getAttribute('data-clipboard-text');
+      console.log('🧲 [Debug] 找到的magnetLink:', magnetLink);
+      if (magnetLink && magnetLink.startsWith('magnet:')) {
+        console.log('✅ [Debug] 磁力链接验证成功:', magnetLink);
+        return magnetLink;
+      } else if (magnetLink) {
+        console.log('⚠️ [Debug] 找到链接但不是磁力链接格式:', magnetLink);
+      }
+    } else {
+      console.log('⚠️ [Debug] 未找到任何复制按钮');
+    }
+  }
+  
+  console.log('❌ [Debug] 未找到有效的磁力链接');
+  return undefined;
+}
 
 // 获取目标视频番号
 function getVideoNumber(): string | undefined {

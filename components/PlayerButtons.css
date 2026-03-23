@@ -25,3 +25,18 @@
 .wxt-player-button:hover {
     transform: scale(1.05);
 }
+
+/* 复制按钮的特定样式 */
+.wxt-copy-button {
+    background-color: #ff6b35; /* 橙色，与其他按钮区分 */
+}
+
+/* 磁力链接按钮的特定样式 */
+.wxt-copy-magnet-button {
+    background-color: #28a745; /* 绿色，表示磁力链接 */
+}
+
+.wxt-copy-magnet-button:hover {
+    transform: scale(1.05);
+    background-color: #218838; /* 悬停时更深绿色 */
+}

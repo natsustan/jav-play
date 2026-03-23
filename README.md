@@ -12,7 +12,6 @@
 
 ## Supported Players
 1. [IINA](https://iina.io/) Recommend in MacOS
-2. [PotPlayer](https://potplayer.daum.net/) Recommend in Windows
 
 ## Players to be supported
 1. ~~[mpv](https://mpv.io/)~~ Because the mpv player is not automatically registered as a protocol handler in the operating system, it is quite troublesome to handle, and support is not currently being considered. If someone is willing to add pmv support, please submit a request.
